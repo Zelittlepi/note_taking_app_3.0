@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, make_response
 import os
 import traceback
 from src.models.note import Note, db
@@ -346,6 +346,149 @@ def auto_complete_existing_note(note_id):
             'details': str(e),
             'traceback': traceback.format_exc() if os.getenv('FLASK_ENV') == 'development' else None
         }), 500
+
+@note_bp.route('/notes/<int:note_id>/export', methods=['GET'])
+def export_note(note_id):
+    """Export a single note as Markdown file"""
+    try:
+        note = Note.query.get_or_404(note_id)
+        
+        # Generate Markdown content
+        markdown_content = generate_note_markdown(note)
+        
+        # Create safe filename
+        safe_title = "".join(c for c in (note.title or "untitled") if c.isalnum() or c in (' ', '-', '_')).rstrip()
+        safe_title = safe_title.replace(' ', '_')[:50]  # Limit length
+        filename = f"{safe_title}.md"
+        
+        # Return file as download
+        response = make_response(markdown_content)
+        response.headers['Content-Type'] = 'text/markdown; charset=utf-8'
+        response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+        
+        return response
+        
+    except Exception as e:
+        return jsonify({
+            'error': 'Export failed',
+            'details': str(e)
+        }), 500
+
+@note_bp.route('/notes/export-all', methods=['GET'])
+def export_all_notes():
+    """Export all notes as a single Markdown file or ZIP archive"""
+    try:
+        notes = Note.query.order_by(Note.created_at.desc()).all()
+        
+        if not notes:
+            return jsonify({'error': 'No notes to export'}), 404
+        
+        # Generate combined Markdown content
+        markdown_content = generate_all_notes_markdown(notes)
+        
+        # Create filename with timestamp
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"all_notes_{timestamp}.md"
+        
+        # Return file as download
+        response = make_response(markdown_content)
+        response.headers['Content-Type'] = 'text/markdown; charset=utf-8'
+        response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+        
+        return response
+        
+    except Exception as e:
+        return jsonify({
+            'error': 'Bulk export failed',
+            'details': str(e)
+        }), 500
+
+def generate_note_markdown(note):
+    """Convert a note to Markdown format"""
+    from datetime import datetime
+    
+    # Start with frontmatter (YAML metadata)
+    markdown = "---\n"
+    markdown += f"title: \"{note.title or 'Untitled'}\"\n"
+    markdown += f"id: {note.id}\n"
+    
+    if note.created_at:
+        markdown += f"created: {note.created_at.strftime('%Y-%m-%d %H:%M:%S')}\n"
+    if note.updated_at:
+        markdown += f"updated: {note.updated_at.strftime('%Y-%m-%d %H:%M:%S')}\n"
+    
+    markdown += "---\n\n"
+    
+    # Add title as main heading
+    markdown += f"# {note.title or 'Untitled'}\n\n"
+    
+    # Add content
+    if note.content:
+        # Clean up content and ensure proper Markdown formatting
+        content = note.content.strip()
+        
+        # If content doesn't start with Markdown headers, treat as paragraphs
+        if not content.startswith('#'):
+            # Split into paragraphs and ensure proper spacing
+            paragraphs = [p.strip() for p in content.split('\n\n') if p.strip()]
+            content = '\n\n'.join(paragraphs)
+        
+        markdown += content + "\n\n"
+    else:
+        markdown += "*No content*\n\n"
+    
+    # Add metadata footer
+    markdown += "---\n"
+    markdown += f"*Exported from NoteTaker on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*\n"
+    
+    return markdown
+
+def generate_all_notes_markdown(notes):
+    """Convert all notes to a combined Markdown format"""
+    from datetime import datetime
+    
+    # Start with document header
+    markdown = f"# All Notes Export\n\n"
+    markdown += f"*Exported from NoteTaker on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*\n\n"
+    markdown += f"**Total Notes:** {len(notes)}\n\n"
+    markdown += "---\n\n"
+    
+    # Add table of contents
+    markdown += "## Table of Contents\n\n"
+    for i, note in enumerate(notes, 1):
+        title = note.title or 'Untitled'
+        # Create anchor link (lowercase, spaces to hyphens, remove special chars)
+        anchor = title.lower().replace(' ', '-')
+        anchor = ''.join(c for c in anchor if c.isalnum() or c == '-')
+        markdown += f"{i}. [{title}](#{anchor})\n"
+    markdown += "\n---\n\n"
+    
+    # Add each note
+    for i, note in enumerate(notes, 1):
+        # Note header
+        markdown += f"## {i}. {note.title or 'Untitled'}\n\n"
+        
+        # Note metadata
+        markdown += f"**ID:** {note.id}  \n"
+        if note.created_at:
+            markdown += f"**Created:** {note.created_at.strftime('%Y-%m-%d %H:%M:%S')}  \n"
+        if note.updated_at:
+            markdown += f"**Updated:** {note.updated_at.strftime('%Y-%m-%d %H:%M:%S')}  \n"
+        markdown += "\n"
+        
+        # Note content
+        if note.content:
+            content = note.content.strip()
+            markdown += content + "\n\n"
+        else:
+            markdown += "*No content*\n\n"
+        
+        # Separator between notes
+        if i < len(notes):
+            markdown += "---\n\n"
+    
+    return markdown
 
 @note_bp.route('/test/vercel-translation/<int:note_id>', methods=['POST'])
 def test_vercel_translation(note_id):

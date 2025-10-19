@@ -232,6 +232,22 @@
             transform: none;
         }
 
+        .btn-export {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-export:hover {
+            background: #218838;
+            transform: translateY(-1px);
+        }
+
+        .btn-export:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+            transform: none;
+        }
+
         .autocomplete-dropdown {
             position: relative;
             display: inline-block;
@@ -473,6 +489,38 @@
         .notes-list::-webkit-scrollbar-thumb:hover {
             background: #5a6fd8;
         }
+
+        .export-dropdown {
+            position: relative;
+            display: inline-block;
+        }
+
+        .export-options {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            background: white;
+            border: 2px solid #28a745;
+            border-radius: 8px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            z-index: 1000;
+            min-width: 180px;
+        }
+
+        .export-option {
+            padding: 10px 15px;
+            cursor: pointer;
+            border-bottom: 1px solid #eee;
+            transition: background-color 0.2s ease;
+        }
+
+        .export-option:hover {
+            background-color: #f8f9fa;
+        }
+
+        .export-option:last-child {
+            border-bottom: none;
+        }
     </style>
 </head>
 <body>
@@ -506,6 +554,13 @@
                             </div>
                         </div>
                         <button class="btn btn-translate" id="translateBtn">🌐 Translate</button>
+                        <div class="export-dropdown">
+                            <button class="btn btn-export" id="exportBtn">📁 Export ▼</button>
+                            <div class="export-options" id="exportOptions" style="display: none;">
+                                <div class="export-option" data-type="single">📄 Export This Note</div>
+                                <div class="export-option" data-type="all">📚 Export All Notes</div>
+                            </div>
+                        </div>
                         <button class="btn btn-delete" id="deleteBtn">🗑️ Delete</button>
                     </div>
                 </div>
@@ -578,11 +633,29 @@
                     });
                 });
                 
-                // Hide dropdown when clicking outside
+                // Export dropdown toggle
+                document.getElementById('exportBtn').addEventListener('click', () => this.toggleExportMenu());
+                
+                // Export menu options
+                document.querySelectorAll('.export-option').forEach(option => {
+                    option.addEventListener('click', (e) => {
+                        const type = e.target.getAttribute('data-type');
+                        this.performExport(type);
+                        this.hideExportMenu();
+                    });
+                });
+
+                // Hide dropdowns when clicking outside
                 document.addEventListener('click', (e) => {
-                    const dropdown = document.querySelector('.autocomplete-dropdown');
-                    if (!dropdown.contains(e.target)) {
+                    const autoCompleteDropdown = document.querySelector('.autocomplete-dropdown');
+                    const exportDropdown = document.querySelector('.export-dropdown');
+                    
+                    if (!autoCompleteDropdown.contains(e.target)) {
                         this.hideAutoCompleteMenu();
+                    }
+                    
+                    if (!exportDropdown.contains(e.target)) {
+                        this.hideExportMenu();
                     }
                 });
                 
@@ -1098,6 +1171,68 @@
                 document.getElementById('autoCompleteResults').style.display = 'none';
                 
                 this.showMessage('Content added to note!', 'success');
+            }
+
+            toggleExportMenu() {
+                const options = document.getElementById('exportOptions');
+                const isVisible = options.style.display === 'block';
+                options.style.display = isVisible ? 'none' : 'block';
+            }
+
+            hideExportMenu() {
+                const options = document.getElementById('exportOptions');
+                options.style.display = 'none';
+            }
+
+            async performExport(type) {
+                const exportBtn = document.getElementById('exportBtn');
+                const originalText = exportBtn.textContent;
+                
+                try {
+                    exportBtn.disabled = true;
+                    exportBtn.textContent = '📁 Exporting...';
+                    
+                    let response;
+                    let filename;
+                    
+                    if (type === 'single') {
+                        if (!this.currentNote || !this.currentNote.id) {
+                            this.showMessage('Please select a note to export', 'error');
+                            return;
+                        }
+                        
+                        this.showMessage('Exporting current note...', 'loading');
+                        response = await fetch(`/api/notes/${this.currentNote.id}/export`);
+                        filename = `${this.currentNote.title || 'untitled'}.md`;
+                    } else if (type === 'all') {
+                        this.showMessage('Exporting all notes...', 'loading');
+                        response = await fetch('/api/notes/export-all');
+                        filename = 'all-notes.md';
+                    }
+                    
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || 'Export failed');
+                    }
+                    
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
+                    
+                    this.showMessage(`${type === 'single' ? 'Note' : 'Notes'} exported successfully!`, 'success');
+                    
+                } catch (error) {
+                    this.showMessage(`Export error: ${error.message}`, 'error');
+                } finally {
+                    exportBtn.disabled = false;
+                    exportBtn.textContent = originalText;
+                }
             }
 
             updateTimestamps(note) {
