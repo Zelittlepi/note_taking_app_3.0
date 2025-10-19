@@ -1,10 +1,11 @@
 """
-Vercel-optimized translation handler
+Vercel-optimized translation handler using requests library
 """
 import os
 import sys
 import json
 import traceback
+import requests
 
 def handle_translation_request(note_id, request_data):
     """
@@ -27,12 +28,12 @@ def handle_translation_request(note_id, request_data):
             result["errors"].append("GITHUB_AI_TOKEN environment variable not set")
             return result
         
-        # Test OpenAI import
+        # Test requests import
         try:
-            from openai import OpenAI
-            result["debug_info"]["openai_import_success"] = True
+            result["debug_info"]["requests_available"] = True
+            result["debug_info"]["requests_version"] = requests.__version__
         except ImportError as e:
-            result["errors"].append(f"OpenAI import failed: {str(e)}")
+            result["errors"].append(f"Requests import failed: {str(e)}")
             return result
         
         # Test database connection
@@ -49,16 +50,13 @@ def handle_translation_request(note_id, request_data):
             result["errors"].append(f"Database query failed: {str(e)}")
             return result
         
-        # Create OpenAI client
-        try:
-            client = OpenAI(
-                base_url="https://models.github.ai/inference",
-                api_key=github_token,
-            )
-            result["debug_info"]["openai_client_created"] = True
-        except Exception as e:
-            result["errors"].append(f"OpenAI client creation failed: {str(e)}")
-            return result
+        # Setup API endpoint and headers
+        endpoint = "https://models.inference.ai.azure.com/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {github_token}",
+            "Content-Type": "application/json"
+        }
+        result["debug_info"]["api_endpoint"] = endpoint
         
         # Perform translation
         try:
@@ -68,8 +66,9 @@ def handle_translation_request(note_id, request_data):
             translations = {}
             
             if translate_title and note.title:
-                response = client.chat.completions.create(
-                    messages=[
+                payload = {
+                    "model": "gpt-4o-mini",
+                    "messages": [
                         {
                             "role": "system",
                             "content": "You are a professional translator. Translate the given English text to Chinese (Simplified Chinese). Only return the translated text without any additional explanations."
@@ -79,18 +78,25 @@ def handle_translation_request(note_id, request_data):
                             "content": f"Translate this English text to Chinese: {note.title}"
                         }
                     ],
-                    temperature=0.3,
-                    top_p=0.9,
-                    model="gpt-4o-mini"
-                )
+                    "temperature": 0.3,
+                    "top_p": 0.9,
+                    "max_tokens": 500
+                }
                 
-                translated_title = response.choices[0].message.content.strip()
-                translations["title"] = translated_title
-                result["debug_info"]["title_translation_success"] = True
+                response = requests.post(endpoint, headers=headers, json=payload, timeout=30)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    translated_title = data["choices"][0]["message"]["content"].strip()
+                    translations["title"] = translated_title
+                    result["debug_info"]["title_translation_success"] = True
+                else:
+                    result["errors"].append(f"Title translation API failed: {response.status_code} - {response.text}")
             
             if translate_content and note.content:
-                response = client.chat.completions.create(
-                    messages=[
+                payload = {
+                    "model": "gpt-4o-mini",
+                    "messages": [
                         {
                             "role": "system",
                             "content": "You are a professional translator. Translate the given English text to Chinese (Simplified Chinese). Only return the translated text without any additional explanations."
@@ -100,25 +106,34 @@ def handle_translation_request(note_id, request_data):
                             "content": f"Translate this English text to Chinese: {note.content}"
                         }
                     ],
-                    temperature=0.3,
-                    top_p=0.9,
-                    model="gpt-4o-mini"
-                )
+                    "temperature": 0.3,
+                    "top_p": 0.9,
+                    "max_tokens": 1000
+                }
                 
-                translated_content = response.choices[0].message.content.strip()
-                translations["content"] = translated_content
-                result["debug_info"]["content_translation_success"] = True
+                response = requests.post(endpoint, headers=headers, json=payload, timeout=30)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    translated_content = data["choices"][0]["message"]["content"].strip()
+                    translations["content"] = translated_content
+                    result["debug_info"]["content_translation_success"] = True
+                else:
+                    result["errors"].append(f"Content translation API failed: {response.status_code} - {response.text}")
             
-            # Success
-            result["status"] = "success"
-            result["translations"] = translations
-            result["original_note"] = note.to_dict()
-            
-            # Backward compatibility
-            if "title" in translations:
-                result["translated_title"] = translations["title"]
-            if "content" in translations:
-                result["translated_content"] = translations["content"]
+            # Success if we have any translations
+            if translations:
+                result["status"] = "success"
+                result["translations"] = translations
+                result["original_note"] = note.to_dict()
+                
+                # Backward compatibility
+                if "title" in translations:
+                    result["translated_title"] = translations["title"]
+                if "content" in translations:
+                    result["translated_content"] = translations["content"]
+            else:
+                result["errors"].append("No translations were performed")
                 
         except Exception as e:
             result["errors"].append(f"Translation failed: {str(e)}")

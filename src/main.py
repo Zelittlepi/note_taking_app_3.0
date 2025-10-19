@@ -97,7 +97,7 @@ def debug_translation():
     debug_info = {
         "github_token_available": bool(os.getenv('GITHUB_AI_TOKEN')),
         "github_token_length": len(os.getenv('GITHUB_AI_TOKEN', '')),
-        "openai_import_available": False,
+        "requests_available": False,
         "translation_service_available": False,
         "translation_service_configured": False,
         "environment": os.getenv('FLASK_ENV', 'not_set'),
@@ -105,13 +105,13 @@ def debug_translation():
         "errors": []
     }
     
-    # Test OpenAI import
+    # Test requests import
     try:
-        import openai
-        debug_info["openai_import_available"] = True
-        debug_info["openai_version"] = openai.__version__
+        import requests
+        debug_info["requests_available"] = True
+        debug_info["requests_version"] = requests.__version__
     except ImportError as e:
-        debug_info["errors"].append(f"OpenAI import failed: {e}")
+        debug_info["errors"].append(f"Requests import failed: {e}")
     
     # Test translation service
     try:

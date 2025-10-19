@@ -220,23 +220,22 @@ def debug_translation_status():
             "GITHUB_AI_TOKEN": bool(os.getenv('GITHUB_AI_TOKEN')),
             "FLASK_ENV": os.getenv('FLASK_ENV', 'not_set')
         },
-        "openai_available": False,
+        "requests_available": False,
         "service_configured": False
     }
     
-    # Test OpenAI import
+    # Test requests import
     try:
-        import openai
-        debug_info["openai_available"] = True
-        debug_info["openai_version"] = openai.__version__
+        import requests
+        debug_info["requests_available"] = True
+        debug_info["requests_version"] = requests.__version__
     except ImportError as e:
-        debug_info["openai_import_error"] = str(e)
+        debug_info["requests_import_error"] = str(e)
     
     # Test translation service
     if TRANSLATION_AVAILABLE and translation_service:
         try:
             debug_info["service_configured"] = translation_service.is_configured()
-            debug_info["service_client_exists"] = translation_service.client is not None
             debug_info["service_token_exists"] = translation_service.token is not None
         except Exception as e:
             debug_info["service_check_error"] = str(e)
