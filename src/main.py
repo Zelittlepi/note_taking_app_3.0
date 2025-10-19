@@ -65,12 +65,62 @@ app.register_blueprint(note_bp, url_prefix='/api')
 # Add health check endpoint
 @app.route('/api/health')
 def health_check():
+    # Check translation service
+    translation_available = False
+    translation_error = None
+    try:
+        from src.services.translation import translation_service
+        translation_available = translation_service.is_configured()
+        if not translation_available:
+            translation_error = "Service not configured"
+    except Exception as e:
+        translation_error = str(e)
+    
     return jsonify({
         "status": "ok",
         "message": "NoteTaker API is running",
         "database_configured": bool(os.getenv('DATABASE_URL')),
-        "translation_available": False  # Will be updated based on actual availability
+        "translation_available": translation_available,
+        "translation_error": translation_error,
+        "github_token_available": bool(os.getenv('GITHUB_AI_TOKEN'))
     })
+
+@app.route('/api/debug/translation')
+def debug_translation():
+    """Debug endpoint to check translation service status"""
+    debug_info = {
+        "github_token_available": bool(os.getenv('GITHUB_AI_TOKEN')),
+        "openai_import_available": False,
+        "translation_service_available": False,
+        "translation_service_configured": False,
+        "errors": []
+    }
+    
+    # Test OpenAI import
+    try:
+        import openai
+        debug_info["openai_import_available"] = True
+    except ImportError as e:
+        debug_info["errors"].append(f"OpenAI import failed: {e}")
+    
+    # Test translation service
+    try:
+        from src.services.translation import translation_service
+        debug_info["translation_service_available"] = True
+        debug_info["translation_service_configured"] = translation_service.is_configured()
+        
+        if translation_service.is_configured():
+            # Try a quick translation test
+            result = translation_service.translate_to_chinese("test")
+            if 'error' in result:
+                debug_info["errors"].append(f"Translation test failed: {result['error']}")
+            else:
+                debug_info["translation_test_success"] = True
+                debug_info["translation_test_result"] = result['translated_text']
+    except Exception as e:
+        debug_info["errors"].append(f"Translation service error: {e}")
+    
+    return jsonify(debug_info)
 
 # Configure Supabase PostgreSQL database
 database_url = os.getenv('DATABASE_URL')
