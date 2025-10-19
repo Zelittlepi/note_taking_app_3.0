@@ -163,6 +163,9 @@ class TranslationService:
         except Exception as e:
             error_msg = f"Translation failed: {str(e)}"
             print(f"❌ {error_msg}")
+            # Add more detailed error info for debugging
+            import traceback
+            print(f"Full traceback: {traceback.format_exc()}")
             return {"error": error_msg}
     
     def translate_text(self, text, target_language="chinese"):

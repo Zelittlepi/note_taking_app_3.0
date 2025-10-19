@@ -1,4 +1,5 @@
 from flask import Blueprint, jsonify, request
+import os
 from src.models.note import Note, db
 
 # Import translation service with error handling
@@ -87,37 +88,77 @@ def search_notes():
 def translate_note(note_id):
     """Translate a note's content from English to Chinese"""
     try:
+        # Check if translation service is available
         if not TRANSLATION_AVAILABLE or not translation_service:
-            return jsonify({'error': 'Translation service is not available'}), 503
-            
-        note = Note.query.get_or_404(note_id)
+            return jsonify({
+                'error': 'Translation service is not available',
+                'details': 'Translation service failed to initialize'
+            }), 503
+        
+        # Get the note
+        try:
+            note = Note.query.get_or_404(note_id)
+        except Exception as e:
+            return jsonify({
+                'error': 'Note not found',
+                'details': str(e)
+            }), 404
+        
+        # Parse request data
         data = request.json or {}
         
         # Determine what to translate
         translate_title = data.get('translate_title', True)
         translate_content = data.get('translate_content', True)
         
-        result = {}
+        result = {
+            'original_note': note.to_dict(),
+            'translations': {}
+        }
         
+        # Translate title if requested
         if translate_title and note.title:
-            title_result = translation_service.translate_to_chinese(note.title)
-            if 'error' in title_result:
-                return jsonify({'error': f'Title translation failed: {title_result["error"]}'}), 500
-            result['translated_title'] = title_result['translated_text']
+            try:
+                title_result = translation_service.translate_to_chinese(note.title)
+                if 'error' in title_result:
+                    return jsonify({
+                        'error': 'Title translation failed',
+                        'details': title_result['error']
+                    }), 500
+                result['translations']['title'] = title_result['translated_text']
+                result['translated_title'] = title_result['translated_text']  # Backward compatibility
+            except Exception as e:
+                return jsonify({
+                    'error': 'Title translation failed',
+                    'details': str(e)
+                }), 500
         
+        # Translate content if requested
         if translate_content and note.content:
-            content_result = translation_service.translate_to_chinese(note.content)
-            if 'error' in content_result:
-                return jsonify({'error': f'Content translation failed: {content_result["error"]}'}), 500
-            result['translated_content'] = content_result['translated_text']
-        
-        # Include original note data
-        result['original_note'] = note.to_dict()
+            try:
+                content_result = translation_service.translate_to_chinese(note.content)
+                if 'error' in content_result:
+                    return jsonify({
+                        'error': 'Content translation failed',
+                        'details': content_result['error']
+                    }), 500
+                result['translations']['content'] = content_result['translated_text']
+                result['translated_content'] = content_result['translated_text']  # Backward compatibility
+            except Exception as e:
+                return jsonify({
+                    'error': 'Content translation failed',
+                    'details': str(e)
+                }), 500
         
         return jsonify(result)
         
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        import traceback
+        return jsonify({
+            'error': 'Translation request failed',
+            'details': str(e),
+            'traceback': traceback.format_exc() if os.getenv('FLASK_ENV') == 'development' else None
+        }), 500
 
 @note_bp.route('/translate', methods=['POST'])
 def translate_text():
@@ -142,4 +183,37 @@ def translate_text():
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@note_bp.route('/debug/translation-status', methods=['GET'])
+def debug_translation_status():
+    """Debug endpoint to check translation service status"""
+    debug_info = {
+        "translation_service_imported": TRANSLATION_AVAILABLE,
+        "translation_service_exists": translation_service is not None,
+        "environment_variables": {
+            "GITHUB_AI_TOKEN": bool(os.getenv('GITHUB_AI_TOKEN')),
+            "FLASK_ENV": os.getenv('FLASK_ENV', 'not_set')
+        },
+        "openai_available": False,
+        "service_configured": False
+    }
+    
+    # Test OpenAI import
+    try:
+        import openai
+        debug_info["openai_available"] = True
+        debug_info["openai_version"] = openai.__version__
+    except ImportError as e:
+        debug_info["openai_import_error"] = str(e)
+    
+    # Test translation service
+    if TRANSLATION_AVAILABLE and translation_service:
+        try:
+            debug_info["service_configured"] = translation_service.is_configured()
+            debug_info["service_client_exists"] = translation_service.client is not None
+            debug_info["service_token_exists"] = translation_service.token is not None
+        except Exception as e:
+            debug_info["service_check_error"] = str(e)
+    
+    return jsonify(debug_info)
 
