@@ -2,10 +2,11 @@
   "version": 2,
   "builds": [
     {
-      "src": "api/*.py",
+      "src": "api/index.py",
       "use": "@vercel/python",
       "config": {
-        "maxLambdaSize": "50mb"
+        "maxLambdaSize": "50mb",
+        "maxDuration": 30
       }
     }
   ],
@@ -25,10 +26,5 @@
   ],
   "env": {
     "FLASK_ENV": "production"
-  },
-  "functions": {
-    "api/*.py": {
-      "maxDuration": 30
-    }
   }
 }
