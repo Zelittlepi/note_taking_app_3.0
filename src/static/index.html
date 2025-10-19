@@ -318,6 +318,40 @@
             border: 1px solid #dee2e6;
         }
 
+        .note-timestamps {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            color: #6c757d;
+        }
+
+        .timestamp-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .timestamp-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .timestamp-label {
+            font-weight: 600;
+            color: #495057;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .timestamp-value {
+            color: #6c757d;
+            font-family: 'Courier New', monospace;
+        }
+
         .form-group {
             margin-bottom: 20px;
         }
@@ -481,6 +515,17 @@
                 <div id="autoCompleteResults" style="display: none;"></div>
 
                 <div id="editorForm" style="display: none;">
+                    <div class="note-timestamps" id="noteTimestamps" style="display: none;">
+                        <div class="timestamp-row">
+                            <span class="timestamp-label">📅 Created:</span>
+                            <span class="timestamp-value" id="noteCreatedAt">-</span>
+                        </div>
+                        <div class="timestamp-row">
+                            <span class="timestamp-label">✏️ Modified:</span>
+                            <span class="timestamp-value" id="noteUpdatedAt">-</span>
+                        </div>
+                    </div>
+
                     <div class="form-group">
                         <label class="form-label" for="noteTitle">Title</label>
                         <input type="text" class="form-input" id="noteTitle" placeholder="Enter note title...">
@@ -603,6 +648,9 @@
                 document.getElementById('noteTitle').value = note.title || '';
                 document.getElementById('noteContent').value = note.content || '';
                 document.getElementById('editorTitle').textContent = note.title || 'Untitled Note';
+                
+                // Update timestamps
+                this.updateTimestamps(note);
             }
 
             createNewNote() {
@@ -619,6 +667,9 @@
                 document.getElementById('noteContent').value = '';
                 document.getElementById('editorTitle').textContent = 'New Note';
                 document.getElementById('noteTitle').focus();
+                
+                // Hide timestamps for new notes (will show after first save)
+                document.getElementById('noteTimestamps').style.display = 'none';
                 
                 // Remove active state from all notes
                 document.querySelectorAll('.note-item').forEach(item => {
@@ -691,6 +742,9 @@
                     
                     this.renderNotesList();
                     document.getElementById('editorTitle').textContent = savedNote.title;
+                    
+                    // Update timestamps with the saved note data
+                    this.updateTimestamps(savedNote);
                     
                     if (!isAutoSave) {
                         this.showMessage('Note saved successfully!', 'success');
@@ -1044,6 +1098,66 @@
                 document.getElementById('autoCompleteResults').style.display = 'none';
                 
                 this.showMessage('Content added to note!', 'success');
+            }
+
+            updateTimestamps(note) {
+                const timestampsDiv = document.getElementById('noteTimestamps');
+                const createdAtElement = document.getElementById('noteCreatedAt');
+                const updatedAtElement = document.getElementById('noteUpdatedAt');
+                
+                if (note.id && (note.created_at || note.updated_at)) {
+                    // Show timestamps for existing notes with dates
+                    timestampsDiv.style.display = 'block';
+                    
+                    if (note.created_at) {
+                        createdAtElement.textContent = this.formatDetailedDate(note.created_at);
+                    } else {
+                        createdAtElement.textContent = 'Unknown';
+                    }
+                    
+                    if (note.updated_at) {
+                        updatedAtElement.textContent = this.formatDetailedDate(note.updated_at);
+                    } else {
+                        updatedAtElement.textContent = 'Unknown';
+                    }
+                } else {
+                    // Hide timestamps for new notes or notes without dates
+                    timestampsDiv.style.display = 'none';
+                }
+            }
+
+            formatDetailedDate(dateString) {
+                const date = new Date(dateString);
+                const now = new Date();
+                
+                // Format: "Oct 19, 2025 at 2:30 PM"
+                const options = {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    hour12: true
+                };
+                
+                const formatted = date.toLocaleDateString('en-US', options);
+                
+                // Add relative time if recent
+                const diffTime = Math.abs(now - date);
+                const diffMinutes = Math.ceil(diffTime / (1000 * 60));
+                const diffHours = Math.ceil(diffTime / (1000 * 60 * 60));
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                
+                let relative = '';
+                if (diffMinutes < 60) {
+                    relative = diffMinutes === 1 ? '1 minute ago' : `${diffMinutes} minutes ago`;
+                } else if (diffHours < 24) {
+                    relative = diffHours === 1 ? '1 hour ago' : `${diffHours} hours ago`;
+                } else if (diffDays < 7) {
+                    relative = diffDays === 1 ? '1 day ago' : `${diffDays} days ago`;
+                }
+                
+                return relative ? `${formatted} (${relative})` : formatted;
             }
         }
 
