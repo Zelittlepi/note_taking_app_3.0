@@ -14,17 +14,37 @@ try:
     DOTENV_AVAILABLE = True
 except ImportError:
     DOTENV_AVAILABLE = False
-    print("python-dotenv package not available")
+    print("python-dotenv package not available, trying manual loader")
+    try:
+        # Manual .env loading
+        env_file = os.path.join(os.path.dirname(__file__), '..', '..', '.env')
+        if os.path.exists(env_file):
+            with open(env_file, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+            
+            for line in lines:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    key, value = line.split('=', 1)
+                    key = key.strip()
+                    value = value.strip()
+                    os.environ[key] = value
+    except Exception as e:
+        print(f"Manual env loader failed: {e}")
 
 class TranslationService:
     def __init__(self):
+        self.client = None
+        self.token = None
+        self.endpoint = "https://models.github.ai/inference"
+        self.model = "gpt-4o-mini"
+        
         if not OPENAI_AVAILABLE:
-            self.client = None
+            print("OpenAI package not available")
             return
             
         self.token = os.getenv("GITHUB_AI_TOKEN")
-        self.endpoint = "https://models.github.ai/inference"
-        self.model = "openai/gpt-4o-mini"
+        print(f"GitHub AI Token found: {'Yes' if self.token else 'No'}")
         
         if self.token:
             try:
@@ -32,11 +52,16 @@ class TranslationService:
                     base_url=self.endpoint,
                     api_key=self.token,
                 )
+                print("OpenAI client initialized successfully")
             except Exception as e:
                 print(f"Failed to initialize OpenAI client: {e}")
                 self.client = None
         else:
-            self.client = None
+            print("No GITHUB_AI_TOKEN found in environment variables")
+    
+    def is_configured(self):
+        """Check if the translation service is properly configured"""
+        return OPENAI_AVAILABLE and self.client is not None and self.token is not None
     
     def translate_to_chinese(self, text):
         """
@@ -46,8 +71,15 @@ class TranslationService:
             if not OPENAI_AVAILABLE:
                 return {"error": "Translation service is not available - OpenAI package not installed"}
             
-            if not self.client:
-                return {"error": "Translation service is not properly configured"}
+            if not self.is_configured():
+                error_details = []
+                if not OPENAI_AVAILABLE:
+                    error_details.append("OpenAI package not available")
+                if not self.token:
+                    error_details.append("GITHUB_AI_TOKEN not set")
+                if not self.client:
+                    error_details.append("OpenAI client not initialized")
+                return {"error": f"Translation service is not properly configured: {', '.join(error_details)}"}
             
             if not text or not text.strip():
                 return {"error": "No text provided for translation"}

@@ -1,12 +1,48 @@
 import os
 import sys
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
 
 # DON'T CHANGE THIS !!!
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
+# Try to load environment variables
+env_loaded = False
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+    env_loaded = True
+    print("✅ Environment variables loaded from .env file using python-dotenv")
+except ImportError:
+    print("python-dotenv not available, trying manual loader")
+    try:
+        # Manual .env loading
+        env_file = os.path.join(os.path.dirname(__file__), '..', '.env')
+        if os.path.exists(env_file):
+            with open(env_file, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+            
+            for line in lines:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    key, value = line.split('=', 1)
+                    key = key.strip()
+                    value = value.strip()
+                    os.environ[key] = value
+            
+            env_loaded = True
+            print("✅ Environment variables loaded manually from .env file")
+        else:
+            print("❌ .env file not found")
+    except Exception as e:
+        print(f"❌ Manual env loader failed: {e}")
+except Exception as e:
+    print(f"❌ Error loading .env file: {e}")
+
+# Verify critical environment variables
+github_token = os.getenv('GITHUB_AI_TOKEN')
+if github_token:
+    print(f"✅ GITHUB_AI_TOKEN found (starts with: {github_token[:20]}...)")
+else:
+    print("❌ GITHUB_AI_TOKEN not found in environment variables")
 
 from flask import Flask, send_from_directory, jsonify
 from flask_cors import CORS
