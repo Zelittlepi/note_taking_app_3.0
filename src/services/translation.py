@@ -1,13 +1,8 @@
 import os
+import requests
+import json
 
 # Handle optional dependencies gracefully
-try:
-    from openai import OpenAI
-    OPENAI_AVAILABLE = True
-except ImportError:
-    OPENAI_AVAILABLE = False
-    print("OpenAI package not available")
-
 try:
     from dotenv import load_dotenv
     load_dotenv()
@@ -34,9 +29,8 @@ except ImportError:
 
 class TranslationService:
     def __init__(self):
-        self.client = None
         self.token = None
-        self.endpoint = "https://models.github.ai/inference"
+        self.endpoint = "https://models.inference.ai.azure.com/chat/completions"
         self.model = "gpt-4o-mini"
         self._initialized = False
         
@@ -68,11 +62,7 @@ class TranslationService:
                 print(f"Failed to load environment variables: {e}")
     
     def _setup_client(self):
-        """Setup the OpenAI client"""
-        if not OPENAI_AVAILABLE:
-            print("❌ OpenAI package not available")
-            return False
-        
+        """Setup the GitHub Copilot API client"""
         # Force reload environment variables
         self._load_env_variables()
         
@@ -81,19 +71,12 @@ class TranslationService:
         
         if self.token:
             try:
-                self.client = OpenAI(
-                    base_url=self.endpoint,
-                    api_key=self.token,
-                )
-                # Test the client with a simple call
-                print("🔄 Testing OpenAI client connection...")
-                # Don't actually make a call during init, just create the client
-                print("✅ OpenAI client initialized successfully")
+                # Test the connection with a simple request
+                print("✅ GitHub Copilot API client initialized successfully")
                 self._initialized = True
                 return True
             except Exception as e:
-                print(f"❌ Failed to initialize OpenAI client: {e}")
-                self.client = None
+                print(f"❌ Failed to initialize GitHub Copilot API client: {e}")
                 self._initialized = False
                 return False
         else:
@@ -108,26 +91,19 @@ class TranslationService:
             print("🔄 Translation service not initialized, attempting setup...")
             self._setup_client()
         
-        return OPENAI_AVAILABLE and self.client is not None and self.token is not None and self._initialized
+        return self.token is not None and self._initialized
     
     def translate_to_chinese(self, text):
         """
-        Translate English text to Chinese using GitHub Copilot AI model
+        Translate English text to Chinese using GitHub Copilot AI model via requests
         """
         try:
             print(f"🌐 Starting translation for text: '{text[:50]}...'")
             
-            if not OPENAI_AVAILABLE:
-                return {"error": "Translation service is not available - OpenAI package not installed"}
-            
             if not self.is_configured():
                 error_details = []
-                if not OPENAI_AVAILABLE:
-                    error_details.append("OpenAI package not available")
                 if not self.token:
                     error_details.append("GITHUB_AI_TOKEN not set")
-                if not self.client:
-                    error_details.append("OpenAI client not initialized")
                 if not self._initialized:
                     error_details.append("Service initialization failed")
                 
@@ -140,8 +116,15 @@ class TranslationService:
             
             print("🚀 Sending request to GitHub AI...")
             
-            response = self.client.chat.completions.create(
-                messages=[
+            # Prepare the request
+            headers = {
+                "Authorization": f"Bearer {self.token}",
+                "Content-Type": "application/json"
+            }
+            
+            payload = {
+                "model": self.model,
+                "messages": [
                     {
                         "role": "system",
                         "content": "You are a professional translator. Translate the given English text to Chinese (Simplified Chinese). Only return the translated text without any additional explanations or formatting unless the original text contains formatting that should be preserved."
@@ -151,14 +134,28 @@ class TranslationService:
                         "content": f"Translate this English text to Chinese: {text}"
                     }
                 ],
-                temperature=0.3,  # Lower temperature for more consistent translations
-                top_p=0.9,
-                model=self.model
+                "temperature": 0.3,
+                "top_p": 0.9,
+                "max_tokens": 500
+            }
+            
+            # Make the API request
+            response = requests.post(
+                self.endpoint,
+                headers=headers,
+                json=payload,
+                timeout=30
             )
             
-            translated_text = response.choices[0].message.content.strip()
-            print(f"✅ Translation successful: '{translated_text}'")
-            return {"translated_text": translated_text}
+            if response.status_code == 200:
+                data = response.json()
+                translated_text = data["choices"][0]["message"]["content"].strip()
+                print(f"✅ Translation successful: '{translated_text}'")
+                return {"translated_text": translated_text}
+            else:
+                error_msg = f"API request failed with status {response.status_code}: {response.text}"
+                print(f"❌ {error_msg}")
+                return {"error": error_msg}
             
         except Exception as e:
             error_msg = f"Translation failed: {str(e)}"

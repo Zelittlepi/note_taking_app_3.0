@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify, request
 import os
+import traceback
 from src.models.note import Note, db
 
 # Import translation service with error handling
@@ -88,7 +89,32 @@ def search_notes():
 def translate_note(note_id):
     """Translate a note's content from English to Chinese"""
     try:
-        # Check if translation service is available
+        # Check if we're in a serverless environment (Vercel)
+        is_vercel = os.getenv('VERCEL') == '1' or 'vercel' in os.getenv('DEPLOYMENT_URL', '').lower()
+        
+        if is_vercel:
+            # Use Vercel-optimized handler
+            try:
+                from src.vercel_translation import handle_translation_request
+                request_data = request.json or {}
+                result = handle_translation_request(note_id, request_data)
+                
+                if result["status"] == "success":
+                    return jsonify(result), 200
+                else:
+                    return jsonify({
+                        "error": "Translation failed",
+                        "details": result["errors"],
+                        "debug_info": result["debug_info"]
+                    }), 500
+            except Exception as e:
+                return jsonify({
+                    "error": "Vercel translation handler failed",
+                    "details": str(e),
+                    "traceback": traceback.format_exc()
+                }), 500
+        
+        # Original handler for local development
         if not TRANSLATION_AVAILABLE or not translation_service:
             return jsonify({
                 'error': 'Translation service is not available',
@@ -216,4 +242,19 @@ def debug_translation_status():
             debug_info["service_check_error"] = str(e)
     
     return jsonify(debug_info)
+
+@note_bp.route('/test/vercel-translation/<int:note_id>', methods=['POST'])
+def test_vercel_translation(note_id):
+    """Test endpoint specifically for debugging Vercel translation issues"""
+    try:
+        from src.vercel_translation import handle_translation_request
+        request_data = request.json or {}
+        result = handle_translation_request(note_id, request_data)
+        return jsonify(result), 200 if result["status"] == "success" else 500
+    except Exception as e:
+        return jsonify({
+            "error": "Test endpoint failed",
+            "details": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
 

@@ -82,7 +82,13 @@ def health_check():
         "database_configured": bool(os.getenv('DATABASE_URL')),
         "translation_available": translation_available,
         "translation_error": translation_error,
-        "github_token_available": bool(os.getenv('GITHUB_AI_TOKEN'))
+        "github_token_available": bool(os.getenv('GITHUB_AI_TOKEN')),
+        "environment": {
+            "VERCEL": os.getenv('VERCEL'),
+            "DEPLOYMENT_URL": os.getenv('DEPLOYMENT_URL'),
+            "FLASK_ENV": os.getenv('FLASK_ENV'),
+            "PYTHON_VERSION": sys.version
+        }
     })
 
 @app.route('/api/debug/translation')
@@ -90,9 +96,12 @@ def debug_translation():
     """Debug endpoint to check translation service status"""
     debug_info = {
         "github_token_available": bool(os.getenv('GITHUB_AI_TOKEN')),
+        "github_token_length": len(os.getenv('GITHUB_AI_TOKEN', '')),
         "openai_import_available": False,
         "translation_service_available": False,
         "translation_service_configured": False,
+        "environment": os.getenv('FLASK_ENV', 'not_set'),
+        "python_path": sys.path[:3],  # First 3 entries
         "errors": []
     }
     
@@ -100,6 +109,7 @@ def debug_translation():
     try:
         import openai
         debug_info["openai_import_available"] = True
+        debug_info["openai_version"] = openai.__version__
     except ImportError as e:
         debug_info["errors"].append(f"OpenAI import failed: {e}")
     
@@ -109,16 +119,26 @@ def debug_translation():
         debug_info["translation_service_available"] = True
         debug_info["translation_service_configured"] = translation_service.is_configured()
         
+        if hasattr(translation_service, 'client'):
+            debug_info["service_client_exists"] = translation_service.client is not None
+        if hasattr(translation_service, 'token'):
+            debug_info["service_token_exists"] = translation_service.token is not None
+            
+        # Try a quick translation test
         if translation_service.is_configured():
-            # Try a quick translation test
-            result = translation_service.translate_to_chinese("test")
-            if 'error' in result:
-                debug_info["errors"].append(f"Translation test failed: {result['error']}")
-            else:
-                debug_info["translation_test_success"] = True
-                debug_info["translation_test_result"] = result['translated_text']
+            try:
+                result = translation_service.translate_to_chinese("test")
+                if 'error' in result:
+                    debug_info["errors"].append(f"Translation test failed: {result['error']}")
+                else:
+                    debug_info["translation_test_success"] = True
+                    debug_info["translation_test_result"] = result['translated_text']
+            except Exception as test_e:
+                debug_info["errors"].append(f"Translation test exception: {str(test_e)}")
     except Exception as e:
         debug_info["errors"].append(f"Translation service error: {e}")
+        import traceback
+        debug_info["traceback"] = traceback.format_exc()
     
     return jsonify(debug_info)
 
