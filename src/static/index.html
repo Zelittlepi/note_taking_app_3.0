@@ -200,6 +200,22 @@
             transform: translateY(-1px);
         }
 
+        .btn-translate {
+            background: #17a2b8;
+            color: white;
+        }
+
+        .btn-translate:hover {
+            background: #138496;
+            transform: translateY(-1px);
+        }
+
+        .btn-translate:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+            transform: none;
+        }
+
         .form-group {
             margin-bottom: 20px;
         }
@@ -345,6 +361,7 @@
                     <h2 class="editor-title" id="editorTitle">Select a note to edit</h2>
                     <div class="editor-actions" id="editorActions" style="display: none;">
                         <button class="btn btn-save" id="saveBtn">💾 Save</button>
+                        <button class="btn btn-translate" id="translateBtn">🌐 Translate</button>
                         <button class="btn btn-delete" id="deleteBtn">🗑️ Delete</button>
                     </div>
                 </div>
@@ -388,6 +405,7 @@
             bindEvents() {
                 document.getElementById('newNoteBtn').addEventListener('click', () => this.createNewNote());
                 document.getElementById('saveBtn').addEventListener('click', () => this.saveNote());
+                document.getElementById('translateBtn').addEventListener('click', () => this.translateNote());
                 document.getElementById('deleteBtn').addEventListener('click', () => this.deleteNote());
                 document.getElementById('searchBox').addEventListener('input', (e) => this.searchNotes(e.target.value));
                 
@@ -547,6 +565,103 @@
                     }
                 } catch (error) {
                     this.showMessage(`Error saving note: ${error.message}`, 'error');
+                }
+            }
+
+            async translateNote() {
+                if (!this.currentNote) {
+                    this.showMessage('Please select a note to translate', 'error');
+                    return;
+                }
+
+                const title = document.getElementById('noteTitle').value.trim();
+                const content = document.getElementById('noteContent').value.trim();
+
+                if (!title && !content) {
+                    this.showMessage('Please enter some content to translate', 'error');
+                    return;
+                }
+
+                const translateBtn = document.getElementById('translateBtn');
+                const originalText = translateBtn.textContent;
+                
+                try {
+                    // Disable button and show loading state
+                    translateBtn.disabled = true;
+                    translateBtn.textContent = '🔄 Translating...';
+                    
+                    this.showMessage('Translating content to Chinese...', 'loading');
+
+                    if (this.currentNote.id) {
+                        // Translate existing note
+                        const response = await fetch(`/api/notes/${this.currentNote.id}/translate`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                translate_title: !!title,
+                                translate_content: !!content
+                            })
+                        });
+
+                        if (!response.ok) throw new Error('Translation failed');
+
+                        const result = await response.json();
+                        
+                        // Update the form fields with translated content
+                        if (result.translated_title) {
+                            document.getElementById('noteTitle').value = result.translated_title;
+                        }
+                        if (result.translated_content) {
+                            document.getElementById('noteContent').value = result.translated_content;
+                        }
+
+                        this.showMessage('Translation completed! Content has been translated to Chinese.', 'success');
+                    } else {
+                        // Translate unsaved note content
+                        const translatePromises = [];
+                        
+                        if (title) {
+                            translatePromises.push(
+                                fetch('/api/translate', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ text: title })
+                                }).then(res => res.json()).then(data => ({ type: 'title', result: data }))
+                            );
+                        }
+
+                        if (content) {
+                            translatePromises.push(
+                                fetch('/api/translate', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ text: content })
+                                }).then(res => res.json()).then(data => ({ type: 'content', result: data }))
+                            );
+                        }
+
+                        const results = await Promise.all(translatePromises);
+                        
+                        results.forEach(({ type, result }) => {
+                            if (result.error) {
+                                throw new Error(`${type} translation failed: ${result.error}`);
+                            }
+                            
+                            if (type === 'title' && result.translated_text) {
+                                document.getElementById('noteTitle').value = result.translated_text;
+                            } else if (type === 'content' && result.translated_text) {
+                                document.getElementById('noteContent').value = result.translated_text;
+                            }
+                        });
+
+                        this.showMessage('Translation completed! Content has been translated to Chinese.', 'success');
+                    }
+                } catch (error) {
+                    this.showMessage(`Translation error: ${error.message}`, 'error');
+                } finally {
+                    // Re-enable button and restore original text
+                    translateBtn.disabled = false;
+                    translateBtn.textContent = originalText;
                 }
             }
 

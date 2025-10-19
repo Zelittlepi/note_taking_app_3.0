@@ -8,6 +8,7 @@ A modern, responsive web application for managing personal notes with a beautifu
 - **Edit Notes**: Update existing notes with real-time editing
 - **Delete Notes**: Remove notes you no longer need
 - **Search Notes**: Find notes quickly by searching titles and content
+- **AI Translation**: Translate notes from English to Chinese using GitHub Copilot AI
 - **Auto-save**: Notes are automatically saved as you type
 - **Responsive Design**: Works perfectly on desktop and mobile devices
 - **Modern UI**: Beautiful gradient design with smooth animations
@@ -137,6 +138,7 @@ Set these in your Vercel dashboard under Project Settings > Environment Variable
 SECRET_KEY=your-production-secret-key-here
 DATABASE_URL=postgresql://postgres.your-project-ref:your-password@aws-0-region.pooler.supabase.com:6543/postgres
 FLASK_ENV=production
+GITHUB_AI_TOKEN=your-github-copilot-token-here
 ```
 
 ## 📡 API Endpoints
@@ -148,6 +150,10 @@ FLASK_ENV=production
 - `PUT /api/notes/<id>` - Update a note
 - `DELETE /api/notes/<id>` - Delete a note
 - `GET /api/notes/search?q=<query>` - Search notes
+
+### Translation API
+- `POST /api/notes/<id>/translate` - Translate a specific note to Chinese
+- `POST /api/translate` - Translate arbitrary text to Chinese
 
 ### Request/Response Format
 ```json

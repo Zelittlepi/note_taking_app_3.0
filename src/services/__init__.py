@@ -1,0 +1,1 @@
+# Services module for the note-taking application
