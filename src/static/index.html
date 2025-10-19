@@ -216,6 +216,108 @@
             transform: none;
         }
 
+        .btn-autocomplete {
+            background: #6f42c1;
+            color: white;
+        }
+
+        .btn-autocomplete:hover {
+            background: #5a2d91;
+            transform: translateY(-1px);
+        }
+
+        .btn-autocomplete:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .autocomplete-dropdown {
+            position: relative;
+            display: inline-block;
+        }
+
+        .autocomplete-menu {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            background: white;
+            border: 2px solid #6f42c1;
+            border-radius: 8px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            z-index: 1000;
+            min-width: 200px;
+            display: none;
+        }
+
+        .autocomplete-menu.show {
+            display: block;
+        }
+
+        .autocomplete-option {
+            padding: 10px 15px;
+            cursor: pointer;
+            border-bottom: 1px solid #eee;
+            transition: background-color 0.2s ease;
+        }
+
+        .autocomplete-option:hover {
+            background-color: #f8f9fa;
+        }
+
+        .autocomplete-option:last-child {
+            border-bottom: none;
+        }
+
+        .autocomplete-results {
+            margin-top: 15px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #6f42c1;
+        }
+
+        .autocomplete-results h4 {
+            margin: 0 0 10px 0;
+            color: #6f42c1;
+            font-size: 1.1rem;
+        }
+
+        .suggestion-item {
+            margin-bottom: 8px;
+            padding: 8px;
+            background: white;
+            border-radius: 4px;
+            border: 1px solid #dee2e6;
+        }
+
+        .correction-item {
+            margin-bottom: 10px;
+            padding: 10px;
+            background: white;
+            border-radius: 4px;
+            border: 1px solid #ffc107;
+            border-left: 4px solid #ffc107;
+        }
+
+        .correction-issue {
+            font-weight: 600;
+            color: #856404;
+            margin-bottom: 5px;
+        }
+
+        .correction-suggestion {
+            color: #495057;
+        }
+
+        .continuation-text {
+            line-height: 1.6;
+            background: white;
+            padding: 15px;
+            border-radius: 4px;
+            border: 1px solid #dee2e6;
+        }
+
         .form-group {
             margin-bottom: 20px;
         }
@@ -361,12 +463,22 @@
                     <h2 class="editor-title" id="editorTitle">Select a note to edit</h2>
                     <div class="editor-actions" id="editorActions" style="display: none;">
                         <button class="btn btn-save" id="saveBtn">💾 Save</button>
+                        <div class="autocomplete-dropdown">
+                            <button class="btn btn-autocomplete" id="autoCompleteBtn">🤖 AI Assist</button>
+                            <div class="autocomplete-menu" id="autoCompleteMenu">
+                                <div class="autocomplete-option" data-type="suggestions">💡 Get Suggestions</div>
+                                <div class="autocomplete-option" data-type="corrections">✏️ Check & Improve</div>
+                                <div class="autocomplete-option" data-type="continuation">📝 Continue Writing</div>
+                            </div>
+                        </div>
                         <button class="btn btn-translate" id="translateBtn">🌐 Translate</button>
                         <button class="btn btn-delete" id="deleteBtn">🗑️ Delete</button>
                     </div>
                 </div>
 
                 <div id="messageArea"></div>
+
+                <div id="autoCompleteResults" style="display: none;"></div>
 
                 <div id="editorForm" style="display: none;">
                     <div class="form-group">
@@ -408,6 +520,26 @@
                 document.getElementById('translateBtn').addEventListener('click', () => this.translateNote());
                 document.getElementById('deleteBtn').addEventListener('click', () => this.deleteNote());
                 document.getElementById('searchBox').addEventListener('input', (e) => this.searchNotes(e.target.value));
+                
+                // Auto-complete dropdown toggle
+                document.getElementById('autoCompleteBtn').addEventListener('click', () => this.toggleAutoCompleteMenu());
+                
+                // Auto-complete menu options
+                document.querySelectorAll('.autocomplete-option').forEach(option => {
+                    option.addEventListener('click', (e) => {
+                        const type = e.target.getAttribute('data-type');
+                        this.performAutoComplete(type);
+                        this.hideAutoCompleteMenu();
+                    });
+                });
+                
+                // Hide dropdown when clicking outside
+                document.addEventListener('click', (e) => {
+                    const dropdown = document.querySelector('.autocomplete-dropdown');
+                    if (!dropdown.contains(e.target)) {
+                        this.hideAutoCompleteMenu();
+                    }
+                });
                 
                 // Auto-save on content change (debounced)
                 let saveTimeout;
@@ -747,6 +879,171 @@
                 } else {
                     return date.toLocaleDateString();
                 }
+            }
+
+            toggleAutoCompleteMenu() {
+                const menu = document.getElementById('autoCompleteMenu');
+                menu.classList.toggle('show');
+            }
+
+            hideAutoCompleteMenu() {
+                const menu = document.getElementById('autoCompleteMenu');
+                menu.classList.remove('show');
+            }
+
+            async performAutoComplete(type) {
+                if (!this.currentNote) {
+                    this.showMessage('Please select a note or create a new one first', 'error');
+                    return;
+                }
+
+                const title = document.getElementById('noteTitle').value.trim();
+                const content = document.getElementById('noteContent').value.trim();
+
+                if (!title && !content) {
+                    this.showMessage('Please enter some content to work with', 'error');
+                    return;
+                }
+
+                const autoCompleteBtn = document.getElementById('autoCompleteBtn');
+                const originalText = autoCompleteBtn.textContent;
+                
+                try {
+                    // Disable button and show loading state
+                    autoCompleteBtn.disabled = true;
+                    autoCompleteBtn.textContent = '🔄 AI Working...';
+                    
+                    this.showMessage(`Getting ${type} from AI...`, 'loading');
+
+                    let response;
+                    if (this.currentNote.id) {
+                        // Use existing note endpoint
+                        response = await fetch(`/api/notes/${this.currentNote.id}/auto-complete`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ type: type })
+                        });
+                    } else {
+                        // Use general auto-complete endpoint
+                        response = await fetch('/api/auto-complete', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                title: title,
+                                content: content,
+                                type: type
+                            })
+                        });
+                    }
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || 'Auto-completion failed');
+                    }
+
+                    const result = await response.json();
+                    this.displayAutoCompleteResults(result);
+                    this.hideMessage();
+                    
+                } catch (error) {
+                    this.showMessage(`AI assistance error: ${error.message}`, 'error');
+                } finally {
+                    // Re-enable button and restore original text
+                    autoCompleteBtn.disabled = false;
+                    autoCompleteBtn.textContent = originalText;
+                }
+            }
+
+            displayAutoCompleteResults(result) {
+                const resultsDiv = document.getElementById('autoCompleteResults');
+                let data = result.result;
+                
+                // Handle cases where the response is text containing JSON
+                if (data.text && typeof data.text === 'string') {
+                    try {
+                        // Extract JSON from code blocks if present
+                        const jsonMatch = data.text.match(/```json\s*([\s\S]*?)\s*```/);
+                        if (jsonMatch) {
+                            data = JSON.parse(jsonMatch[1]);
+                        } else {
+                            // Try to parse the entire text as JSON
+                            data = JSON.parse(data.text);
+                        }
+                    } catch (e) {
+                        // If parsing fails, use the text as-is
+                        console.log('Could not parse JSON from response, using as plain text');
+                    }
+                }
+                
+                let html = '';
+                
+                if (result.type === 'suggestions' && data.suggestions) {
+                    html = `
+                        <div class="autocomplete-results">
+                            <h4>💡 AI Suggestions</h4>
+                            ${data.suggestions.map(suggestion => {
+                                const text = suggestion.suggestion || suggestion;
+                                return `<div class="suggestion-item">${this.escapeHtml(text)}</div>`;
+                            }).join('')}
+                        </div>
+                    `;
+                } else if (result.type === 'corrections' && data.corrections) {
+                    html = `
+                        <div class="autocomplete-results">
+                            <h4>✏️ Corrections & Improvements</h4>
+                            ${data.corrections.map(correction => 
+                                `<div class="correction-item">
+                                    <div class="correction-issue">${this.escapeHtml(correction.issue)}</div>
+                                    <div class="correction-suggestion">${this.escapeHtml(correction.suggestion)}</div>
+                                </div>`
+                            ).join('')}
+                        </div>
+                    `;
+                } else if (result.type === 'continuation' && data.continuation) {
+                    html = `
+                        <div class="autocomplete-results">
+                            <h4>📝 Suggested Continuation</h4>
+                            <div class="continuation-text">${this.escapeHtml(data.continuation)}</div>
+                            <button class="btn btn-save" onclick="noteTaker.appendToCurrent('${this.escapeHtml(data.continuation).replace(/'/g, "\\'")}')">
+                                ➕ Add to Note
+                            </button>
+                        </div>
+                    `;
+                } else if (data.text) {
+                    // Fallback for plain text responses
+                    html = `
+                        <div class="autocomplete-results">
+                            <h4>🤖 AI Response</h4>
+                            <div class="continuation-text">${this.escapeHtml(data.text)}</div>
+                        </div>
+                    `;
+                } else {
+                    // Handle unexpected format
+                    html = `
+                        <div class="autocomplete-results">
+                            <h4>🤖 AI Response</h4>
+                            <pre class="continuation-text">${this.escapeHtml(JSON.stringify(data, null, 2))}</pre>
+                        </div>
+                    `;
+                }
+                
+                resultsDiv.innerHTML = html;
+                resultsDiv.style.display = 'block';
+                
+                // Scroll to results
+                resultsDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+
+            appendToCurrent(text) {
+                const contentArea = document.getElementById('noteContent');
+                const currentContent = contentArea.value;
+                const newContent = currentContent + (currentContent ? '\n\n' : '') + text;
+                contentArea.value = newContent;
+                
+                // Hide the results after appending
+                document.getElementById('autoCompleteResults').style.display = 'none';
+                
+                this.showMessage('Content added to note!', 'success');
             }
         }
 

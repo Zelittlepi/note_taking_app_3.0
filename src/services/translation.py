@@ -173,6 +173,117 @@ class TranslationService:
             return self.translate_to_chinese(text)
         else:
             return {"error": f"Translation to {target_language} is not supported yet"}
+    
+    def auto_complete_note(self, title="", content="", completion_type="suggestions"):
+        """
+        Auto-complete note content using AI
+        
+        Args:
+            title: Current note title
+            content: Current note content
+            completion_type: Type of completion - "suggestions", "corrections", "continuation"
+        """
+        try:
+            print(f"🤖 Starting auto-completion for note: '{title[:30]}...'")
+            
+            if not self.is_configured():
+                error_details = []
+                if not self.token:
+                    error_details.append("GITHUB_AI_TOKEN not set")
+                if not self._initialized:
+                    error_details.append("Service initialization failed")
+                
+                error_msg = f"Auto-complete service is not properly configured: {', '.join(error_details)}"
+                print(f"❌ {error_msg}")
+                return {"error": error_msg}
+            
+            if not title and not content:
+                return {"error": "Please provide either a title or some content to work with"}
+            
+            # Prepare different prompts based on completion type
+            system_prompts = {
+                "suggestions": "You are a helpful writing assistant. Analyze the given note content and provide 3-5 relevant suggestions to expand or improve the content. Focus on adding value, depth, and useful details. Respond with a JSON object containing 'suggestions' array.",
+                "corrections": "You are a professional editor. Review the given note content and provide helpful corrections and improvements for grammar, clarity, and structure. Respond with a JSON object containing 'corrections' array with objects having 'issue' and 'suggestion' fields.",
+                "continuation": "You are a creative writing assistant. Based on the existing note content, continue writing in the same style and tone. Provide 2-3 paragraphs that naturally extend the content. Respond with a JSON object containing 'continuation' field."
+            }
+            
+            system_prompt = system_prompts.get(completion_type, system_prompts["suggestions"])
+            
+            # Create user prompt based on available content
+            if title and content:
+                user_prompt = f"Note Title: {title}\n\nNote Content:\n{content}\n\nPlease provide {completion_type} for this note."
+            elif title:
+                user_prompt = f"Note Title: {title}\n\nI have this title but no content yet. Please provide {completion_type} for what this note could contain."
+            else:
+                user_prompt = f"Note Content:\n{content}\n\nPlease provide {completion_type} for this note content."
+            
+            print("🚀 Sending auto-completion request to GitHub AI...")
+            
+            # Prepare the request
+            headers = {
+                "Authorization": f"Bearer {self.token}",
+                "Content-Type": "application/json"
+            }
+            
+            payload = {
+                "model": self.model,
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": system_prompt
+                    },
+                    {
+                        "role": "user",
+                        "content": user_prompt
+                    }
+                ],
+                "temperature": 0.7,  # Higher creativity for suggestions
+                "top_p": 0.9,
+                "max_tokens": 800
+            }
+            
+            # Make the API request
+            response = requests.post(
+                self.endpoint,
+                headers=headers,
+                json=payload,
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                ai_response = data["choices"][0]["message"]["content"].strip()
+                
+                # Try to parse as JSON first, fallback to text if needed
+                try:
+                    import json
+                    parsed_response = json.loads(ai_response)
+                    print(f"✅ Auto-completion successful: {completion_type}")
+                    return {
+                        "success": True,
+                        "type": completion_type,
+                        "result": parsed_response
+                    }
+                except json.JSONDecodeError:
+                    # If JSON parsing fails, return as plain text
+                    print(f"✅ Auto-completion successful (plain text): {completion_type}")
+                    return {
+                        "success": True,
+                        "type": completion_type,
+                        "result": {"text": ai_response}
+                    }
+            else:
+                error_msg = f"API request failed with status {response.status_code}: {response.text}"
+                print(f"❌ {error_msg}")
+                return {"error": error_msg}
+            
+        except Exception as e:
+            error_msg = f"Auto-completion failed: {str(e)}"
+            print(f"❌ {error_msg}")
+            # Add more detailed error info for debugging
+            import traceback
+            print(f"Full traceback: {traceback.format_exc()}")
+            return {"error": error_msg}
 
 # Create a global instance
 translation_service = TranslationService()

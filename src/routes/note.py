@@ -242,6 +242,111 @@ def debug_translation_status():
     
     return jsonify(debug_info)
 
+@note_bp.route('/auto-complete', methods=['POST'])
+def auto_complete_note():
+    """Auto-complete note content using AI"""
+    try:
+        data = request.json or {}
+        title = data.get('title', '').strip()
+        content = data.get('content', '').strip()
+        completion_type = data.get('type', 'suggestions')  # suggestions, corrections, continuation
+        
+        # Validate completion type
+        valid_types = ['suggestions', 'corrections', 'continuation']
+        if completion_type not in valid_types:
+            return jsonify({
+                'error': f'Invalid completion type. Must be one of: {", ".join(valid_types)}'
+            }), 400
+        
+        if not title and not content:
+            return jsonify({
+                'error': 'Please provide either a title or content to work with'
+            }), 400
+        
+        # Check if translation service is available
+        if not TRANSLATION_AVAILABLE:
+            return jsonify({
+                'error': 'Auto-completion service is not available'
+            }), 503
+        
+        print(f"🤖 Auto-completion request: type={completion_type}, title='{title[:30]}...', content_len={len(content)}")
+        
+        # Use translation service for auto-completion
+        result = translation_service.auto_complete_note(
+            title=title,
+            content=content,
+            completion_type=completion_type
+        )
+        
+        if 'error' in result:
+            return jsonify({
+                'error': 'Auto-completion failed',
+                'details': result['error']
+            }), 500
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        import traceback
+        print(f"❌ Auto-completion endpoint error: {e}")
+        return jsonify({
+            'error': 'Auto-completion request failed',
+            'details': str(e),
+            'traceback': traceback.format_exc() if os.getenv('FLASK_ENV') == 'development' else None
+        }), 500
+
+@note_bp.route('/notes/<int:note_id>/auto-complete', methods=['POST'])
+def auto_complete_existing_note(note_id):
+    """Auto-complete content for an existing note"""
+    try:
+        # Get the note from database
+        note = Note.query.get_or_404(note_id)
+        
+        data = request.json or {}
+        completion_type = data.get('type', 'suggestions')
+        
+        # Validate completion type
+        valid_types = ['suggestions', 'corrections', 'continuation']
+        if completion_type not in valid_types:
+            return jsonify({
+                'error': f'Invalid completion type. Must be one of: {", ".join(valid_types)}'
+            }), 400
+        
+        # Check if translation service is available
+        if not TRANSLATION_AVAILABLE:
+            return jsonify({
+                'error': 'Auto-completion service is not available'
+            }), 503
+        
+        print(f"🤖 Auto-completion for note {note_id}: type={completion_type}")
+        
+        # Use translation service for auto-completion
+        result = translation_service.auto_complete_note(
+            title=note.title or '',
+            content=note.content or '',
+            completion_type=completion_type
+        )
+        
+        if 'error' in result:
+            return jsonify({
+                'error': 'Auto-completion failed',
+                'details': result['error']
+            }), 500
+        
+        # Add note information to response
+        result['note'] = note.to_dict()
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        import traceback
+        print(f"❌ Auto-completion endpoint error: {e}")
+        return jsonify({
+            'error': 'Auto-completion request failed',
+            'details': str(e),
+            'traceback': traceback.format_exc() if os.getenv('FLASK_ENV') == 'development' else None
+        }), 500
+
 @note_bp.route('/test/vercel-translation/<int:note_id>', methods=['POST'])
 def test_vercel_translation(note_id):
     """Test endpoint specifically for debugging Vercel translation issues"""
