@@ -1,6 +1,14 @@
 from flask import Blueprint, jsonify, request
 from src.models.note import Note, db
-from src.services.translation import translation_service
+
+# Import translation service with error handling
+try:
+    from src.services.translation import translation_service
+    TRANSLATION_AVAILABLE = True
+except Exception as e:
+    print(f"Translation service not available: {e}")
+    TRANSLATION_AVAILABLE = False
+    translation_service = None
 
 note_bp = Blueprint('note', __name__)
 
@@ -79,8 +87,11 @@ def search_notes():
 def translate_note(note_id):
     """Translate a note's content from English to Chinese"""
     try:
+        if not TRANSLATION_AVAILABLE or not translation_service:
+            return jsonify({'error': 'Translation service is not available'}), 503
+            
         note = Note.query.get_or_404(note_id)
-        data = request.json
+        data = request.json or {}
         
         # Determine what to translate
         translate_title = data.get('translate_title', True)
@@ -112,6 +123,9 @@ def translate_note(note_id):
 def translate_text():
     """Translate arbitrary text from English to Chinese"""
     try:
+        if not TRANSLATION_AVAILABLE or not translation_service:
+            return jsonify({'error': 'Translation service is not available'}), 503
+            
         data = request.json
         if not data or 'text' not in data:
             return jsonify({'error': 'Text is required for translation'}), 400

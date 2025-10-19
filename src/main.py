@@ -8,7 +8,7 @@ load_dotenv()
 # DON'T CHANGE THIS !!!
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from flask import Flask, send_from_directory
+from flask import Flask, send_from_directory, jsonify
 from flask_cors import CORS
 from src.models.user import db
 from src.routes.user import user_bp
@@ -25,6 +25,16 @@ CORS(app)
 
 app.register_blueprint(user_bp, url_prefix='/api')
 app.register_blueprint(note_bp, url_prefix='/api')
+
+# Add health check endpoint
+@app.route('/api/health')
+def health_check():
+    return jsonify({
+        "status": "ok",
+        "message": "NoteTaker API is running",
+        "database_configured": bool(os.getenv('DATABASE_URL')),
+        "translation_available": False  # Will be updated based on actual availability
+    })
 
 # Configure Supabase PostgreSQL database
 database_url = os.getenv('DATABASE_URL')

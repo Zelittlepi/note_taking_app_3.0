@@ -1,25 +1,54 @@
 import os
-from openai import OpenAI
-from dotenv import load_dotenv
 
-load_dotenv()
+# Handle optional dependencies gracefully
+try:
+    from openai import OpenAI
+    OPENAI_AVAILABLE = True
+except ImportError:
+    OPENAI_AVAILABLE = False
+    print("OpenAI package not available")
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+    DOTENV_AVAILABLE = True
+except ImportError:
+    DOTENV_AVAILABLE = False
+    print("python-dotenv package not available")
 
 class TranslationService:
     def __init__(self):
+        if not OPENAI_AVAILABLE:
+            self.client = None
+            return
+            
         self.token = os.getenv("GITHUB_AI_TOKEN")
         self.endpoint = "https://models.github.ai/inference"
         self.model = "openai/gpt-4o-mini"
         
-        self.client = OpenAI(
-            base_url=self.endpoint,
-            api_key=self.token,
-        )
+        if self.token:
+            try:
+                self.client = OpenAI(
+                    base_url=self.endpoint,
+                    api_key=self.token,
+                )
+            except Exception as e:
+                print(f"Failed to initialize OpenAI client: {e}")
+                self.client = None
+        else:
+            self.client = None
     
     def translate_to_chinese(self, text):
         """
         Translate English text to Chinese using GitHub Copilot AI model
         """
         try:
+            if not OPENAI_AVAILABLE:
+                return {"error": "Translation service is not available - OpenAI package not installed"}
+            
+            if not self.client:
+                return {"error": "Translation service is not properly configured"}
+            
             if not text or not text.strip():
                 return {"error": "No text provided for translation"}
             

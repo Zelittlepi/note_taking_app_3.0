@@ -13,3 +13,5 @@ README.md
 .DS_Store
 src/database/
 *.db
+test_deployment.py
+llm.py
