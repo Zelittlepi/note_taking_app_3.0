@@ -1,8 +1,18 @@
 # Lab 2 — AI-assisted NoteTaker Development
 
-Author: Student (using AI assistant as pair-programmer)
+Author: WANGZe 25062904g
 Date: 2025-10-19
-Repository: note_taking_app_3.0 (branch: feature/add-summary)
+Github Repository: https://github.com/Zelittlepi/note_taking_app_3.0
+Website link：https://note-taking-app-3-0-jmih.vercel.app/
+
+Summary：For this project, I don't need to write a single line of code. All the provided instructions will be completed by the AI，like：
+
+```
+I need to change the database to use supabase postgresql locally. I configured supabase in one go. The baseurl is in the.env file
+I need to deploy the application to the Vercel cloud platform. Please help me adapt it
+```
+
+Model：Claude Sonnet 4
 
 ---
 
@@ -20,16 +30,6 @@ The final application structure (relevant files):
 - `src/static/index.html` — Frontend UI and JavaScript
 - `requirements.txt` — Python package requirements
 - `lab2_writeup.md` — This document
-
-
-## Objectives
-
-1. Integrate AI-powered translation (English ↔ Chinese) without using vendor SDKs where possible.
-2. Add AI-powered auto-complete (suggestions, corrections, continuation).
-3. Track and display note creation and modification timestamps.
-4. Add Markdown export support for single-note and bulk exports (.md files).
-5. Prepare documentation summarizing the entire process for grading.
-
 
 ## Development Steps (chronological)
 
@@ -126,38 +126,3 @@ python src\main.py
 
 4. Open http://127.0.0.1:5001 in your browser. Create notes, try AI features, and test export.
 
-
-## Screenshots (optional)
-
-Include screenshots to illustrate steps (you can add these manually):
-
-- Screenshot 1: App main screen with notes list
-- Screenshot 2: Note editor showing timestamps and AI buttons
-- Screenshot 3: Export dropdown and downloaded .md file opened in editor
-
-
-## Suggested Improvements & Next Steps
-
-- Add unit tests for export functions (`generate_note_markdown`, `generate_all_notes_markdown`).
-- Add authentication & per-user export isolation.
-- Add server-side validation & sanitization for Markdown output.
-- Add optional ZIP export for multiple files instead of a single combined file.
-- Add UI to preview the Markdown before downloading.
-
-
-## Academic Notes
-
-This writeup documents an AI-assisted development workflow. I used the AI assistant extensively to generate code, debug issues, and craft UI logic. I refined the AI's output where necessary and tested locally to ensure functionality.
-
-
----
-
-If you'd like, I can also:
-- Add screenshots to `lab2_writeup.md` if you provide images or allow me to generate sample ones.
-- Create a small unit test file for Markdown generators and run tests.
-- Create a PR-ready commit message and push the changes to the repository.
-
-
----
-
-End of lab write-up.
