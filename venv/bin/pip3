@@ -1,4 +1,4 @@
-#!/home/ubuntu/notetaking-app/venv/bin/python3.11
+#!/home/runner/work/note_taking_app_3.0/note_taking_app_3.0/venv/bin/python
 # -*- coding: utf-8 -*-
 import re
 import sys
